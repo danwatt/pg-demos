@@ -4,6 +4,10 @@ To start this demo, type `make run`.
 
 ### Comparison
 
+![er diagram](./tables.png)
+
+#### Integer Keys
+
 ```postgresql
 SELECT ct.name
 FROM intkeys.parent_table pt
@@ -24,6 +28,8 @@ Nested Loop  (cost=4.61..31.45 rows=5 width=72) (actual time=0.519..0.744 rows=4
 Planning Time: 1.203 ms
 Execution Time: 1.023 ms
 ```
+
+#### String Keys
 
 ```postgresql
 SELECT ct.name
