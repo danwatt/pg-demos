@@ -6,6 +6,16 @@ To start this demo, type `make run`.
 
 ![er diagram](./tables.png)
 
+The following queries should proce the same rows:
+
+| name | sk |
+| :--- | :--- |
+| 94A612C5C6405146C4A1B26E4913C241286A926985211B41FE | C8D3E0C59486DEEBCD33 |
+| E07CB79DC862840077E1D00DEA3CBEAD0DD1534961CF58DDC9 | C8D3E0C59486DEEBCD33 |
+| 4251E26A0EA38F98456A11912E08AAE9461C0B49E95AF854A8 | C8D3E0C59486DEEBCD33 |
+| B2E1DB58FF46FB69092702B290F83E315EA682BF895C6B817C | C8D3E0C59486DEEBCD33 |
+
+
 #### Integer Keys
 
 ```postgresql
@@ -52,11 +62,16 @@ Planning Time: 0.161 ms
 Execution Time: 0.493 ms
 ```
 
-#### Size Comparison
+#### Size Comparison (kb)
 
 | table\_schema | table\_name | total | index | table |
 | :--- | :--- | :--- | :--- | :--- |
-| intkeys | child\_table | 10 MB | 4896 kB | 5368 kB |
-| intkeys | parent\_table | 1904 kB | 800 kB | 1104 kB |
-| stringkeys | child\_table | 13 MB | 7432 kB | 6192 kB |
-| stringkeys | parent\_table | 2144 kB | 1120 kB | 1024 kB |
+| intkeys | parent\_table | 1,904 | 800 | 1.104 |
+| intkeys | child\_table | 10,264 | 4,896 | 5,368 |
+| intkeys | total        | 12,168 | 5,696 | 6,472 |
+
+| table\_schema | table\_name | total | index | table |
+| :--- | :--- | :--- | :--- | :--- |
+| stringkeys | parent\_table | 1,584 | 560 | 1,024 |
+| stringkeys | child\_table | 11,152 | 4,960 | 6,192 |
+| stringkeys | total        | 12,736 | 5,520 | 7,216 |

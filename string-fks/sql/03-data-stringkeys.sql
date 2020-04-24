@@ -19,12 +19,6 @@ ALTER TABLE stringkeys.child_table
 CREATE INDEX child_table_parent_id_index
     ON stringkeys.child_table (parent_sk);
 
-CREATE INDEX child_table_sk_index
-    ON stringkeys.child_table (sk);
-
-CREATE INDEX parent_table_sk_index
-    ON stringkeys.parent_table (sk);
-
 TRUNCATE stringkeys.parent_table CASCADE;
 
 INSERT INTO stringkeys.parent_table(sk, NAME)
