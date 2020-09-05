@@ -19,7 +19,7 @@ The following queries should proce the same rows:
 #### Integer Keys
 
 ```postgresql
-SELECT ct.name
+SELECT ct.name, pt.sk
 FROM intkeys.parent_table pt
      JOIN intkeys.child_table ct ON pt.id = ct.parent_id
 WHERE pt.sk = '832126C27B70CE64D53A';
@@ -42,7 +42,7 @@ Execution Time: 1.023 ms
 #### String Keys
 
 ```postgresql
-SELECT ct.name
+SELECT ct.name, pt.sk
 FROM stringkeys.parent_table pt
      JOIN stringkeys.child_table ct ON pt.sk = ct.parent_sk
 WHERE pt.sk = '832126C27B70CE64D53A';
