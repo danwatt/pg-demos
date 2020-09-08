@@ -29,6 +29,15 @@ After adding a sequences or a global sequence, plus a flag to identify the most 
 | 2020-09-05T13:13:00Z | 4cb473af | 3 | 4 | true |
 | 2020-09-05T13:14:00Z | 0c03631c | 2 | 5 | true |
 
+## Limitations
+
+This assumes that the underlying table is insert-only. There are no
+deletes, and no updates. If the `current` record were deleted,
+the previous (highest seq number) would need to be marked as current.
+If an older record were deleted, you may or may not want to update
+seq numbers (ie: if records 1-5 exist, and 3 was removed, do
+you want the databaser to have 1,2,4,5, or 1,2,3,4?).
+
 ## Running
 
 From a terminal window:
