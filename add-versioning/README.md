@@ -29,3 +29,20 @@ After adding a sequences or a global sequence, plus a flag to identify the most 
 | 2020-09-05T13:13:00Z | 4cb473af | 3 | 4 | true |
 | 2020-09-05T13:14:00Z | 0c03631c | 2 | 5 | true |
 
+## Running
+
+From a terminal window:
+
+```shell script
+make run
+```
+
+Connect to the database:
+```shell script
+psql -h localhost -U postgres
+password: (the password is 'password')
+
+select * from demo_table where synthetic_key = (select synthetic_key from demo_table where local_seq > 10 limit 1);
+```
+
+
