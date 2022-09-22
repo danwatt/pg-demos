@@ -57,6 +57,9 @@ create unique index ux_dog_breed_reversed
 create index ix_dog_breed_breed_id
     on dog_breed (breed_id) ;
 
+
+-- "Unknown" table
+
 create table dog_breed_unknown
 (
     dog_id   int not null,
@@ -71,21 +74,6 @@ create unique index ux_dog_breed_unknown_reversed
 
 create index ix_dog_breed_unknown_breed_id
     on dog_breed_unknown (breed_id);
-
-create table dog_breed_null
-(
-    dog_id   int not null,
-    breed_id int null
-);
-
-create unique index ux_dog_breed_null
-    on dog_breed_null (dog_id, breed_id);
-
-create unique index ux_dog_breed_null_reversed
-    on dog_breed_null (breed_id,dog_id);
-
-create index ix_dog_breed_null_breed_id
-    on dog_breed_null (breed_id);
 
 
 

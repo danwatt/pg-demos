@@ -34,14 +34,5 @@ select d.id, (select id from breed where breed.breed = 'Unknown')
 from dog d
 where d.id not in (select dog_id from dog_breed_unknown);
 
-insert into dog_breed_null(dog_id, breed_id)
-select dog_id, breed_id
-from dog_breed;
-
-insert into dog_breed_null (dog_id, breed_id)
-select d.id, null
-from dog d
-where d.id not in (select dog_id from dog_breed_null);
-
 
 vacuum analyse;
