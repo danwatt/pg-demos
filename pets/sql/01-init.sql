@@ -1,24 +1,92 @@
-CREATE TABLE test_covid_act_now (
-    date date,
-    country text,
-    state text,
-    county text,
-    location_id text,
-    positive_tests integer null,
-    negative_tests integer null,
-    total_hospital_beds_used integer null,
-    covid_hospital_beds integer null,
-    covid_icu_beds integer null,
-    new_cases integer null,
-    positive_ratio numeric null,
-    infection_rate numeric null
+CREATE TABLE name
+(
+    name varchar
 );
 
-create table cbsa
+CREATE TABLE breed
 (
-    code integer      not null
-        constraint cbsa_pk
-            primary key,
-    name varchar(128) not null,
-    type varchar(32)  not null
+    id                          serial primary key,
+    breed                       varchar(128),
+    description                 text,
+    temperament                 text,
+    popularity                  int,
+    min_height                  float4,
+    max_height                  float4,
+    min_weight                  float4,
+    max_weight                  float4,
+    min_expectancy              float4,
+    max_expectancy              float4,
+    breed_group                 varchar(128),
+    grooming_frequency_value    float4,
+    grooming_frequency_category varchar(128),
+    shedding_value              float4,
+    shedding_category           varchar(128),
+    energy_level_value          float4,
+    energy_level_category       varchar(128),
+    trainability_value          float4,
+    trainability_category       varchar(128),
+    demeanor_value              float4,
+    demeanor_category           varchar(128)
 );
+
+create index ix_breed_name
+    on breed (breed);
+
+
+create table dog
+(
+    id   serial primary key,
+    name varchar(128)
+);
+
+create index ix_dog_name
+    on dog (name);
+
+create table dog_breed
+(
+    dog_id   int not null,
+    breed_id int not null
+);
+
+create unique index ux_dog_breed
+    on dog_breed (dog_id, breed_id);
+
+create unique index ux_dog_breed_reversed
+    on dog_breed (breed_id,dog_id);
+
+create index ix_dog_breed_breed_id
+    on dog_breed (breed_id) ;
+
+create table dog_breed_unknown
+(
+    dog_id   int not null,
+    breed_id int not null
+);
+
+create unique index ux_dog_breed_unknown
+    on dog_breed_unknown (dog_id, breed_id);
+
+create unique index ux_dog_breed_unknown_reversed
+    on dog_breed_unknown (breed_id,dog_id);
+
+create index ix_dog_breed_unknown_breed_id
+    on dog_breed_unknown (breed_id);
+
+create table dog_breed_null
+(
+    dog_id   int not null,
+    breed_id int null
+);
+
+create unique index ux_dog_breed_null
+    on dog_breed_null (dog_id, breed_id);
+
+create unique index ux_dog_breed_null_reversed
+    on dog_breed_null (breed_id,dog_id);
+
+create index ix_dog_breed_null_breed_id
+    on dog_breed_null (breed_id);
+
+
+
+
