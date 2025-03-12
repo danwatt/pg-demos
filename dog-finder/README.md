@@ -2,7 +2,7 @@
 
 ### Purpose
 
-TODO: Link to blog post
+[See blog post for details](https://www.danwatt.org/2022/09/optimize-left-join/).
 
 ## Startup
 
