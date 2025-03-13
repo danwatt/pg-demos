@@ -1,7 +1,7 @@
 ALTER TABLE demo_table
-    ADD local_seq INT NULL;
+    ADD version INT NULL;
 
--- backfill local_seq values - this issues an update to the entire table
+-- backfill version values - this issues an update to the entire table
 -- and may take some time for a large table.
 
 WITH generator AS (
@@ -13,23 +13,23 @@ WITH generator AS (
     FROM demo_table
 )
 UPDATE demo_table
-SET local_seq = g.rn
+SET version = g.rn
 FROM generator g
 WHERE demo_table.id = g.id;
 
 -- Add trigger
 
-CREATE FUNCTION local_sequence_trg() RETURNS TRIGGER AS
+CREATE FUNCTION version_trg() RETURNS TRIGGER AS
 $$
 DECLARE
     current_max INT;
 BEGIN
-    SELECT coalesce(max(local_seq), 0)
+    SELECT coalesce(max(version), 0)
     FROM demo_table
     WHERE synthetic_key = NEW.synthetic_key
     INTO current_max;
 
-    NEW.local_seq = current_max + 1;
+    NEW.version = current_max + 1;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -38,15 +38,15 @@ $$ LANGUAGE plpgsql;
 -- What would happen if we issued an INSERT that contained two rows with the same
 -- synthetic key?
 
-CREATE TRIGGER trg_insert_local_seq
+CREATE TRIGGER trg_insert_demo_version
     BEFORE INSERT
     ON demo_table
     FOR EACH ROW
-EXECUTE PROCEDURE local_sequence_trg();
+EXECUTE PROCEDURE version_trg();
 
 -- Make column non-nullable
 
 ALTER TABLE demo_table
-    ALTER COLUMN local_seq
+    ALTER COLUMN version
         SET NOT NULL;
 
