@@ -9,12 +9,12 @@ plt.figure(figsize=(10, 6))
 
 # Plot each president as a separate series
 for president, group in df.groupby("president"):
-    plt.plot(group["nth_day_in_office"], group["delta"], marker="o", linestyle="-", label=president)
+    plt.plot(group["nth_day_in_office"], group["delta"], marker=".", linestyle="-", label=president)
 
 # Formatting the plot
 plt.xlabel("Nth Day in Office")
 plt.ylabel("Change in Market since first day, Percent")
-plt.title("Stock Market Changes by President")
+plt.title("Stock Market (DJIA) Changes by President")
 plt.legend(title="President")
 plt.grid(True)
 

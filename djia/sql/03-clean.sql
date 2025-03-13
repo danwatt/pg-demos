@@ -26,36 +26,23 @@ update market
 set trading_day = 0
 where djia is null;
 
--- Fill holidays / non-trading days with the previous close
-with filler as (select observation_date,
-                       djia,
-                       coalesce(djia, lag(djia) over(order by observation_date)) as previousClose
-                from market)
-update market as d
-set djia = f.previousClose from filler as f
-where f.observation_date = d.observation_date
-  and d.djia is null
-  and f.previousClose is not null;
+-- Fill missing prices with the last known good value.
+-- The SQL Standard has an option for last_value(IGNORE NULLS), but as of Postgres 17 this has not been implemented
 
--- Run twice, because we could have two days in a row.
--- TODO: Exercise for later - there is a way to do this as a single statement
-with filler as (select observation_date,
-                       djia,
-                       coalesce(djia, lag(djia) over(order by observation_date)) as previousClose
-                from market)
-update market as d
-set djia = f.previousClose from filler as f
-where f.observation_date = d.observation_date
-  and d.djia is null
-  and f.previousClose is not null;
-
--- Fill one mroe time, because there are 3-day weekends
-with filler as (select observation_date,
-                       djia,
-                       coalesce(djia, lag(djia) over(order by observation_date)) as previousClose
-                from market)
-update market as d
-set djia = f.previousClose from filler as f
-where f.observation_date = d.observation_date
-  and d.djia is null
-  and f.previousClose is not null;
+-- https://stackoverflow.com/a/37471185
+with fixer as (
+    select observation_date,
+           djia,
+           (select case when m1.djia is null then m2.djia else m1.djia end
+            from market m2
+            where m2.observation_date < m1.observation_date
+              and m2.djia is not null
+            order by m2.observation_date desc
+                fetch first 1 row only) as fix
+    from market m1
+)
+update market m
+set djia = f.fix
+from fixer f
+where m.djia is null
+  and m.observation_date = f.observation_date;
