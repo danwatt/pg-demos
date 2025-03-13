@@ -6,12 +6,13 @@ alter table market
 -- Backfill the trading days
 update market
 set trading_day = 1
-where djia is null;
+where djia is not null;
 
--- Fill weekends
+-- Fill weekends or any other missing dates
 insert into market(observation_date, djia)
-SELECT CAST('2015-03-11' AS DATE) + (n || ' day')::INTERVAL, null::double precision
-FROM generate_series(0, 3700) n
+SELECT CAST('2009-01-05' AS DATE) + (n || ' day')::INTERVAL, null::double precision
+FROM generate_series(0, 10000) n
+WHERE CAST('2009-01-05' AS DATE) + (n || ' day')::INTERVAL <= '2025-12-31'
 EXCEPT
 select observation_date, null
 from market;
@@ -19,6 +20,11 @@ from market;
 DELETE
 from market
 where observation_date > now();
+
+-- Backfill non-trading days
+update market
+set trading_day = 0
+where djia is null;
 
 -- Fill holidays / non-trading days with the previous close
 with filler as (select observation_date,
@@ -53,8 +59,3 @@ set djia = f.previousClose from filler as f
 where f.observation_date = d.observation_date
   and d.djia is null
   and f.previousClose is not null;
-
--- Backfill non-trading days
-update market
-set trading_day = 0
-where djia is null;
