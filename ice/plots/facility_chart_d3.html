@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ICE Facility Data Visualization (D3.js)</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        select {
+            padding: 8px;
+            font-size: 16px;
+            min-width: 300px;
+        }
+        .chart-container {
+            height: 600px;
+            width: 100%;
+            position: relative;
+        }
+        h1 {
+            color: #333;
+        }
+        .loading {
+            text-align: center;
+            font-size: 18px;
+            margin-top: 100px;
+        }
+        .line {
+            fill: none;
+            stroke-width: 2;
+        }
+        .axis path,
+        .axis line {
+            fill: none;
+            stroke: #000;
+            shape-rendering: crispEdges;
+        }
+        .grid line {
+            stroke: lightgrey;
+            stroke-opacity: 0.7;
+            shape-rendering: crispEdges;
+        }
+        .grid path {
+            stroke-width: 0;
+        }
+        .tooltip {
+            position: absolute;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            pointer-events: none;
+            font-size: 12px;
+        }
+        .legend {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 10px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-right: 20px;
+        }
+        .legend-color {
+            width: 15px;
+            height: 15px;
+            margin-right: 5px;
+            border-radius: 2px;
+        }
+        .chart-title {
+            text-align: center;
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ICE Facility Detention Levels (D3.js)</h1>
+        <div class="controls">
+            <label for="facility-select">Select Facility:</label>
+            <select id="facility-select">
+                <option value="">Loading facilities...</option>
+            </select>
+        </div>
+        <div class="chart-title" id="chart-title"></div>
+        <div class="legend" id="legend"></div>
+        <div class="chart-container">
+            <div id="chart"></div>
+            <div id="loading" class="loading">Loading data...</div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let facilitiesData = {};
+        let svg, xScale, yScale, xAxis, yAxis;
+        const margin = {top: 20, right: 80, bottom: 50, left: 80};
+        const colors = {
+            'level_a': 'rgba(75, 192, 192, 1)',
+            'level_b': 'rgba(54, 162, 235, 1)',
+            'level_c': 'rgba(255, 206, 86, 1)',
+            'level_d': 'rgba(255, 99, 132, 1)'
+        };
+        const labels = {
+            'level_a': 'Level A',
+            'level_b': 'Level B',
+            'level_c': 'Level C',
+            'level_d': 'Level D'
+        };
+
+        // Function to load and parse CSV data
+        async function loadData() {
+            try {
+                const response = await fetch('data/ice_denormalized_data.csv');
+                const csvText = await response.text();
+
+                // Parse CSV data
+                Papa.parse(csvText, {
+                    header: true,
+                    dynamicTyping: true, // Convert numeric values to numbers
+                    complete: function(results) {
+                        processData(results.data);
+                    },
+                    error: function(error) {
+                        console.error('Error parsing CSV:', error);
+                        document.getElementById('loading').textContent = 'Error loading data. Please try again.';
+                    }
+                });
+            } catch (error) {
+                console.error('Error fetching CSV:', error);
+                document.getElementById('loading').textContent = 'Error loading data. Please try again.';
+            }
+        }
+
+        // Process the data and organize by facility
+        function processData(data) {
+            // Group data by facility
+            data.forEach(row => {
+                const facilityName = row.facility_name;
+
+                // Skip rows with missing data
+                if (!facilityName) return;
+
+                // Initialize facility data if it doesn't exist
+                if (!facilitiesData[facilityName]) {
+                    facilitiesData[facilityName] = [];
+                }
+
+                // Convert date string to Date object
+                const date = new Date(row.measured_on);
+
+                // Add data point
+                facilitiesData[facilityName].push({
+                    date: date,
+                    level_a: row.level_a || 0,
+                    level_b: row.level_b || 0,
+                    level_c: row.level_c || 0,
+                    level_d: row.level_d || 0
+                });
+            });
+
+            // Sort data by date for each facility
+            Object.keys(facilitiesData).forEach(facility => {
+                facilitiesData[facility].sort((a, b) => a.date - b.date);
+            });
+
+            // Initialize the chart
+            initializeChart();
+
+            // Populate facility dropdown
+            populateFacilityDropdown();
+
+            // Hide loading message
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        // Initialize the chart
+        function initializeChart() {
+            const chartContainer = document.getElementById('chart');
+            const width = chartContainer.clientWidth || 1000;
+            const height = chartContainer.clientHeight || 500;
+            const chartWidth = width - margin.left - margin.right;
+            const chartHeight = height - margin.top - margin.bottom;
+
+            // Create SVG element
+            svg = d3.select('#chart')
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height)
+                .append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+
+            // Create scales
+            xScale = d3.scaleTime()
+                .range([0, chartWidth]);
+
+            yScale = d3.scaleLinear()
+                .range([chartHeight, 0]);
+
+            // Create axes
+            xAxis = svg.append('g')
+                .attr('class', 'x axis')
+                .attr('transform', `translate(0,${chartHeight})`);
+
+            yAxis = svg.append('g')
+                .attr('class', 'y axis');
+
+            // Add X axis label
+            svg.append('text')
+                .attr('class', 'x-axis-label')
+                .attr('text-anchor', 'middle')
+                .attr('x', chartWidth / 2)
+                .attr('y', chartHeight + margin.bottom - 10)
+                .text('Date');
+
+            // Add Y axis label
+            svg.append('text')
+                .attr('class', 'y-axis-label')
+                .attr('text-anchor', 'middle')
+                .attr('transform', `rotate(-90)`)
+                .attr('x', -chartHeight / 2)
+                .attr('y', -margin.left + 20)
+                .text('Count');
+
+            // Add grid lines
+            svg.append('g')
+                .attr('class', 'grid')
+                .attr('transform', `translate(0,${chartHeight})`);
+
+            svg.append('g')
+                .attr('class', 'grid');
+
+            // Create tooltip
+            d3.select('body').append('div')
+                .attr('class', 'tooltip')
+                .style('opacity', 0);
+
+            // Create legend
+            createLegend();
+        }
+
+        // Create legend
+        function createLegend() {
+            const legendContainer = document.getElementById('legend');
+            legendContainer.innerHTML = '';
+
+            Object.keys(labels).forEach(key => {
+                const legendItem = document.createElement('div');
+                legendItem.className = 'legend-item';
+
+                const colorBox = document.createElement('div');
+                colorBox.className = 'legend-color';
+                colorBox.style.backgroundColor = colors[key];
+
+                const label = document.createElement('span');
+                label.textContent = labels[key];
+
+                legendItem.appendChild(colorBox);
+                legendItem.appendChild(label);
+                legendContainer.appendChild(legendItem);
+            });
+        }
+
+        // Populate the facility dropdown
+        function populateFacilityDropdown() {
+            const select = document.getElementById('facility-select');
+            select.innerHTML = ''; // Clear loading option
+
+            // Add facilities to dropdown
+            Object.keys(facilitiesData).sort().forEach(facility => {
+                const option = document.createElement('option');
+                option.value = facility;
+                option.textContent = facility;
+                select.appendChild(option);
+            });
+
+            // Set event listener for dropdown change
+            select.addEventListener('change', updateChart);
+
+            // Initialize chart with first facility
+            if (select.options.length > 0) {
+                select.selectedIndex = 0;
+                updateChart();
+            }
+        }
+
+        // Update the chart based on selected facility
+        function updateChart() {
+            const facilitySelect = document.getElementById('facility-select');
+            const selectedFacility = facilitySelect.value;
+
+            if (!selectedFacility || !facilitiesData[selectedFacility]) return;
+
+            const facilityData = facilitiesData[selectedFacility];
+            
+            // Update chart title
+            document.getElementById('chart-title').textContent = `Detention Level Trends at ${selectedFacility}`;
+
+            // Get chart dimensions
+            const chartContainer = document.getElementById('chart');
+            const width = chartContainer.clientWidth || 1000;
+            const height = chartContainer.clientHeight || 500;
+            const chartWidth = width - margin.left - margin.right;
+            const chartHeight = height - margin.top - margin.bottom;
+
+            // Update scales
+            xScale.domain(d3.extent(facilityData, d => d.date));
+            
+            const yMax = d3.max(facilityData, d => {
+                return Math.max(d.level_a, d.level_b, d.level_c, d.level_d);
+            });
+            yScale.domain([0, yMax * 1.1]); // Add 10% padding
+
+            // Update axes
+            xAxis.call(d3.axisBottom(xScale)
+                .tickFormat(d3.timeFormat('%Y-%m-%d')));
+            
+            yAxis.call(d3.axisLeft(yScale));
+
+            // Update grid
+            svg.select('.grid:nth-child(1)')
+                .call(d3.axisBottom(xScale)
+                    .tickSize(-chartHeight)
+                    .tickFormat(''));
+            
+            svg.select('.grid:nth-child(2)')
+                .call(d3.axisLeft(yScale)
+                    .tickSize(-chartWidth)
+                    .tickFormat(''));
+
+            // Create line generator
+            const line = d3.line()
+                .x(d => xScale(d.date))
+                .y(d => yScale(d.value))
+                .curve(d3.curveMonotoneX);
+
+            // Prepare data for each level
+            const levels = ['level_a', 'level_b', 'level_c', 'level_d'];
+            const lineData = levels.map(level => {
+                return {
+                    name: level,
+                    values: facilityData.map(d => ({
+                        date: d.date,
+                        value: d[level]
+                    }))
+                };
+            });
+
+            // Remove existing lines
+            svg.selectAll('.line-group').remove();
+
+            // Add lines
+            const lineGroups = svg.selectAll('.line-group')
+                .data(lineData)
+                .enter()
+                .append('g')
+                .attr('class', 'line-group');
+
+            lineGroups.append('path')
+                .attr('class', 'line')
+                .attr('d', d => line(d.values))
+                .style('stroke', d => colors[d.name])
+                .style('opacity', 0.8);
+
+            // Add points
+            lineGroups.each(function(d) {
+                d3.select(this).selectAll('.point')
+                    .data(d.values)
+                    .enter()
+                    .append('circle')
+                    .attr('class', 'point')
+                    .attr('cx', d => xScale(d.date))
+                    .attr('cy', d => yScale(d.value))
+                    .attr('r', 4)
+                    .style('fill', colors[d.name])
+                    .style('opacity', 0.8)
+                    .on('mouseover', function(event, point) {
+                        const tooltip = d3.select('.tooltip');
+                        tooltip.transition()
+                            .duration(200)
+                            .style('opacity', 0.9);
+                        tooltip.html(`
+                            <strong>Date:</strong> ${point.date.toISOString().split('T')[0]}<br>
+                            <strong>${labels[d.name]}:</strong> ${point.value.toFixed(2)}
+                        `)
+                            .style('left', (event.pageX + 10) + 'px')
+                            .style('top', (event.pageY - 28) + 'px');
+                    })
+                    .on('mouseout', function() {
+                        d3.select('.tooltip').transition()
+                            .duration(500)
+                            .style('opacity', 0);
+                    });
+            });
+        }
+
+        // Resize chart when window is resized
+        window.addEventListener('resize', function() {
+            if (svg) {
+                updateChart();
+            }
+        });
+
+        // Load data when page loads
+        document.addEventListener('DOMContentLoaded', loadData);
+    </script>
+</body>
+</html>

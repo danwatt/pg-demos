@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ICE Facility Data Visualization</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        select {
+            padding: 8px;
+            font-size: 16px;
+            min-width: 300px;
+        }
+        select[multiple] {
+            height: auto;
+            min-height: 150px;
+            overflow-y: auto;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        select[multiple] option {
+            padding: 8px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        select[multiple] option:checked {
+            background-color: #e0f0ff;
+            color: #333;
+        }
+        .chart-container {
+            height: 600px;
+            width: 100%;
+        }
+        h1 {
+            color: #333;
+        }
+        .loading {
+            text-align: center;
+            font-size: 18px;
+            margin-top: 100px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ICE Facility Detention Levels</h1>
+        <div class="controls">
+            <div style="display: flex; gap: 20px; align-items: center;">
+                <div>
+                    <label for="facility-select">Select Facility:</label>
+                    <select id="facility-select" multiple size="5">
+                        <option value="">Loading facilities...</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="visualization-type">Visualization Type:</label>
+                    <select id="visualization-type">
+                        <option value="levels">Risk Levels (A-D)</option>
+                        <option value="threat">Threat Levels</option>
+                        <option value="gender">Gender & Criminal Status</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="chart-container">
+            <canvas id="chart"></canvas>
+            <div id="loading" class="loading">Loading data...</div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let chartInstance = null;
+        let facilitiesData = {};
+
+        // Function to load and parse CSV data
+        async function loadData() {
+            try {
+                const response = await fetch('data/ice_denormalized_data.csv');
+                const csvText = await response.text();
+
+                // Parse CSV data
+                Papa.parse(csvText, {
+                    header: true,
+                    dynamicTyping: true, // Convert numeric values to numbers
+                    complete: function(results) {
+                        processData(results.data);
+                    },
+                    error: function(error) {
+                        console.error('Error parsing CSV:', error);
+                        document.getElementById('loading').textContent = 'Error loading data. Please try again.';
+                    }
+                });
+            } catch (error) {
+                console.error('Error fetching CSV:', error);
+                document.getElementById('loading').textContent = 'Error loading data. Please try again.';
+            }
+        }
+
+        // Process the data and organize by facility
+        function processData(data) {
+            // Group data by facility
+            data.forEach(row => {
+                const facilityName = row.facility_name;
+
+                // Skip rows with missing data
+                if (!facilityName) return;
+
+                // Initialize facility data if it doesn't exist
+                if (!facilitiesData[facilityName]) {
+                    facilitiesData[facilityName] = [];
+                }
+
+                // Convert date string to Date object
+                const date = new Date(row.measured_on);
+
+                // Add data point
+                facilitiesData[facilityName].push({
+                    date: date,
+                    // Detention levels
+                    level_a: row.level_a || 0,
+                    level_b: row.level_b || 0,
+                    level_c: row.level_c || 0,
+                    level_d: row.level_d || 0,
+                    // Threat levels
+                    ice_threat_level_1: row.ice_threat_level_1 || 0,
+                    ice_threat_level_2: row.ice_threat_level_2 || 0,
+                    ice_threat_level_3: row.ice_threat_level_3 || 0,
+                    no_ice_threat_level: row.no_ice_threat_level || 0,
+                    // Gender & criminal status
+                    male_crim: row.male_crim || 0,
+                    male_non_crim: row.male_non_crim || 0,
+                    female_crim: row.female_crim || 0,
+                    female_non_crim: row.female_non_crim || 0
+                });
+            });
+
+            // Sort data by date for each facility
+            Object.keys(facilitiesData).forEach(facility => {
+                facilitiesData[facility].sort((a, b) => a.date - b.date);
+            });
+
+            // Populate facility dropdown
+            populateFacilityDropdown();
+
+            // Hide loading message
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        // Populate the facility dropdown
+        function populateFacilityDropdown() {
+            const select = document.getElementById('facility-select');
+            select.innerHTML = ''; // Clear loading option
+
+            // Add "ALL" option at the top
+            const allOption = document.createElement('option');
+            allOption.value = "ALL";
+            allOption.textContent = "ALL";
+            select.appendChild(allOption);
+
+            // Add facilities to dropdown
+            Object.keys(facilitiesData).sort().forEach(facility => {
+                const option = document.createElement('option');
+                option.value = facility;
+                option.textContent = facility;
+                select.appendChild(option);
+            });
+
+            // Set event listener for facility dropdown change
+            select.addEventListener('change', updateChart);
+
+            // Set event listener for visualization type dropdown change
+            document.getElementById('visualization-type').addEventListener('change', updateChart);
+
+            // Initialize chart with ALL facilities selected
+            allOption.selected = true;
+            updateChart();
+        }
+
+        // Update the chart based on selected facilities and visualization type
+        function updateChart() {
+            const facilitySelect = document.getElementById('facility-select');
+            const visualizationSelect = document.getElementById('visualization-type');
+            const selectedVisualization = visualizationSelect.value;
+
+            // Get selected facilities
+            const selectedOptions = Array.from(facilitySelect.selectedOptions);
+            let selectedFacilities = selectedOptions.map(option => option.value);
+
+            // Handle "ALL" option
+            if (selectedFacilities.includes("ALL")) {
+                selectedFacilities = Object.keys(facilitiesData);
+            }
+
+            // If no facilities are selected, return
+            if (selectedFacilities.length === 0) return;
+
+            // Aggregate data from all selected facilities
+            const allDates = new Set();
+            selectedFacilities.forEach(facility => {
+                if (facilitiesData[facility]) {
+                    facilitiesData[facility].forEach(d => {
+                        allDates.add(d.date.toISOString().split('T')[0]);
+                    });
+                }
+            });
+
+            // Convert to array and sort
+            const sortedDates = Array.from(allDates).sort();
+
+            // Create aggregated data structure
+            const aggregatedData = {};
+            sortedDates.forEach(dateStr => {
+                aggregatedData[dateStr] = {
+                    // Detention levels
+                    level_a: 0,
+                    level_b: 0,
+                    level_c: 0,
+                    level_d: 0,
+                    // Threat levels
+                    ice_threat_level_1: 0,
+                    ice_threat_level_2: 0,
+                    ice_threat_level_3: 0,
+                    no_ice_threat_level: 0,
+                    // Gender & criminal status
+                    male_crim: 0,
+                    male_non_crim: 0,
+                    female_crim: 0,
+                    female_non_crim: 0
+                };
+            });
+
+            // Fill in the aggregated data
+            selectedFacilities.forEach(facility => {
+                if (facilitiesData[facility]) {
+                    facilitiesData[facility].forEach(d => {
+                        const dateStr = d.date.toISOString().split('T')[0];
+                        if (aggregatedData[dateStr]) {
+                            // Add values to aggregated data
+                            aggregatedData[dateStr].level_a += d.level_a;
+                            aggregatedData[dateStr].level_b += d.level_b;
+                            aggregatedData[dateStr].level_c += d.level_c;
+                            aggregatedData[dateStr].level_d += d.level_d;
+                            aggregatedData[dateStr].ice_threat_level_1 += d.ice_threat_level_1;
+                            aggregatedData[dateStr].ice_threat_level_2 += d.ice_threat_level_2;
+                            aggregatedData[dateStr].ice_threat_level_3 += d.ice_threat_level_3;
+                            aggregatedData[dateStr].no_ice_threat_level += d.no_ice_threat_level;
+                            aggregatedData[dateStr].male_crim += d.male_crim;
+                            aggregatedData[dateStr].male_non_crim += d.male_non_crim;
+                            aggregatedData[dateStr].female_crim += d.female_crim;
+                            aggregatedData[dateStr].female_non_crim += d.female_non_crim;
+                        }
+                    });
+                }
+            });
+
+            // Prepare data for Chart.js
+            const labels = sortedDates;
+
+            let datasets = [];
+            let chartTitle = '';
+
+            // Create facility name string for title
+            let facilityNameStr = selectedFacilities.length > 3 
+                ? `${selectedFacilities.length} Facilities` 
+                : selectedFacilities.join(', ');
+
+            // Configure datasets based on selected visualization type
+            if (selectedVisualization === 'levels') {
+                chartTitle = `Risk Level Trends at ${facilityNameStr}`;
+                datasets = [
+                    {
+                        label: 'Low Risk (A)',
+                        data: sortedDates.map(date => aggregatedData[date].level_a),
+                        borderColor: 'rgba(75, 192, 75, 1)', // Green
+                        backgroundColor: 'rgba(75, 192, 75, 0.1)',
+                        fill: false,
+                        tension: 0.1,
+                        pointRadius: 3
+                    },
+                    {
+                        label: 'Medium Low Risk (B)',
+                        data: sortedDates.map(date => aggregatedData[date].level_b),
+                        borderColor: 'rgba(255, 206, 86, 1)', // Yellow
+                        backgroundColor: 'rgba(255, 206, 86, 0.1)',
+                        fill: false,
+                        tension: 0.1,
+                        pointRadius: 3
+                    },
+                    {
+                        label: 'Medium High Risk (C)',
+                        data: sortedDates.map(date => aggregatedData[date].level_c),
+                        borderColor: 'rgba(255, 159, 64, 1)', // Orange
+                        backgroundColor: 'rgba(255, 159, 64, 0.1)',
+                        fill: false,
+                        tension: 0.1,
+                        pointRadius: 3
+                    },
+                    {
+                        label: 'High Risk (D)',
+                        data: sortedDates.map(date => aggregatedData[date].level_d),
+                        borderColor: 'rgba(255, 99, 132, 1)', // Red
+                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                        fill: false,
+                        tension: 0.1,
+                        pointRadius: 3
+                    }
+                ];
+            } else if (selectedVisualization === 'threat') {
+                chartTitle = `ICE Threat Level Trends at ${facilityNameStr}`;
+                datasets = [
+                    {
+                        label: 'Threat Level 1',
+                        data: sortedDates.map(date => aggregatedData[date].ice_threat_level_1),
+                        borderColor: 'rgba(255, 206, 86, 1)', // Yellow
+                        backgroundColor: 'rgba(255, 206, 86, 0.1)',
+                        fill: false,
+                        tension: 0.1,
+                        pointRadius: 3
+                    },
+                    {
+                        label: 'Threat Level 2',
+                        data: sortedDates.map(date => aggregatedData[date].ice_threat_level_2),
+                        borderColor: 'rgba(255, 159, 64, 1)', // Orange
+                        backgroundColor: 'rgba(255, 159, 64, 0.1)',
+                        fill: false,
+                        tension: 0.1,
+                        pointRadius: 3
+                    },
+                    {
+                        label: 'Threat Level 3',
+                        data: sortedDates.map(date => aggregatedData[date].ice_threat_level_3),
+                        borderColor: 'rgba(255, 99, 132, 1)', // Red
+                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                        fill: false,
+                        tension: 0.1,
+                        pointRadius: 3
+                    },
+                    {
+                        label: 'No Threat Level',
+                        data: sortedDates.map(date => aggregatedData[date].no_ice_threat_level),
+                        borderColor: 'rgba(54, 162, 235, 1)', // Blue
+                        backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                        fill: false,
+                        tension: 0.1,
+                        pointRadius: 3
+                    }
+                ];
+            } else if (selectedVisualization === 'gender') {
+                chartTitle = `Gender & Criminal Status Trends at ${facilityNameStr}`;
+                datasets = [
+                    {
+                        label: 'Male Criminal',
+                        data: sortedDates.map(date => aggregatedData[date].male_crim),
+                        borderColor: 'rgba(54, 162, 235, 1)', // Blue
+                        backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                        fill: false,
+                        tension: 0.1,
+                        pointRadius: 3
+                    },
+                    {
+                        label: 'Male Non-Criminal',
+                        data: sortedDates.map(date => aggregatedData[date].male_non_crim),
+                        borderColor: 'rgba(75, 192, 75, 1)', // Green
+                        backgroundColor: 'rgba(75, 192, 75, 0.1)',
+                        fill: false,
+                        tension: 0.1,
+                        pointRadius: 3
+                    },
+                    {
+                        label: 'Female Criminal',
+                        data: sortedDates.map(date => aggregatedData[date].female_crim),
+                        borderColor: 'rgba(255, 99, 132, 1)', // Red
+                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                        fill: false,
+                        tension: 0.1,
+                        pointRadius: 3
+                    },
+                    {
+                        label: 'Female Non-Criminal',
+                        data: sortedDates.map(date => aggregatedData[date].female_non_crim),
+                        borderColor: 'rgba(255, 182, 193, 1)', // Pink
+                        backgroundColor: 'rgba(255, 182, 193, 0.1)',
+                        fill: false,
+                        tension: 0.1,
+                        pointRadius: 3
+                    }
+                ];
+            }
+
+            // Destroy previous chart if it exists
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            // Create new chart
+            const ctx = document.getElementById('chart').getContext('2d');
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Date'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Count'
+                            }
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: chartTitle,
+                            font: {
+                                size: 18
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false
+                        },
+                        legend: {
+                            position: 'top',
+                        }
+                    }
+                }
+            });
+        }
+
+        // Load data when page loads
+        document.addEventListener('DOMContentLoaded', loadData);
+    </script>
+</body>
+</html>
