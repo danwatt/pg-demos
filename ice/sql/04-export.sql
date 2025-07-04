@@ -5,6 +5,7 @@
 COPY (
     SELECT 
         f.name AS facility_name,
+        f.state,
         m.measured_on,
         MAX(CASE WHEN m.data_point = 'level_a' THEN m.interval_value END) AS level_a,
         MAX(CASE WHEN m.data_point = 'level_b' THEN m.interval_value END) AS level_b,
@@ -29,7 +30,7 @@ COPY (
             'ice_threat_level_1', 'ice_threat_level_2', 'ice_threat_level_3', 'no_ice_threat_level'
         )
     GROUP BY 
-        f.name, m.measured_on
+        f.name, f.state, m.measured_on
     ORDER BY 
-        f.name, m.measured_on
+        f.name, f.state, m.measured_on
 ) TO '/tmp/out/ice_denormalized_data.csv' WITH CSV DELIMITER ',' HEADER;

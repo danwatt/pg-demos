@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ICE State Data Visualization - Hexagon Grid</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/d3-hexbin@0.2.2/build/d3-hexbin.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        select {
+            padding: 8px;
+            font-size: 16px;
+            min-width: 300px;
+        }
+        .map-container {
+            height: 600px;
+            width: 100%;
+            position: relative;
+        }
+        h1 {
+            color: #333;
+        }
+        .loading {
+            text-align: center;
+            font-size: 18px;
+            margin-top: 100px;
+        }
+        .info-box {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+        .tooltip {
+            position: absolute;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            pointer-events: none;
+            font-size: 12px;
+            z-index: 1000;
+        }
+        .legend {
+            display: flex;
+            flex-direction: column;
+            position: absolute;
+            right: 20px;
+            top: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ICE Detention Data by State - Hexagon Grid</h1>
+        <div class="controls">
+            <div style="display: flex; gap: 20px; align-items: center;">
+                <div>
+                    <label for="data-point-select">Select Data Point:</label>
+                    <select id="data-point-select">
+                        <option value="level_a">Low Risk (A)</option>
+                        <option value="level_b">Medium Low Risk (B)</option>
+                        <option value="level_c">Medium High Risk (C)</option>
+                        <option value="level_d">High Risk (D)</option>
+                        <option value="male_crim">Male Criminal</option>
+                        <option value="male_non_crim">Male Non-Criminal</option>
+                        <option value="female_crim">Female Criminal</option>
+                        <option value="female_non_crim">Female Non-Criminal</option>
+                        <option value="ice_threat_level_1">ICE Threat Level 1</option>
+                        <option value="ice_threat_level_2">ICE Threat Level 2</option>
+                        <option value="ice_threat_level_3">ICE Threat Level 3</option>
+                        <option value="no_ice_threat_level">No ICE Threat Level</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="date-select">Select Date:</label>
+                    <select id="date-select">
+                        <option value="">Loading dates...</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="map-container">
+            <div id="map"></div>
+            <div id="loading" class="loading">Loading data...</div>
+        </div>
+        <div class="info-box">
+            <p>This map shows ICE detention data aggregated by state using a hexagon grid representation. Each hexagon represents a US state, with color intensity indicating the magnitude of the selected data point.</p>
+            <p>Select a data point and date from the dropdowns to update the visualization.</p>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let stateData = {};
+        let allDates = [];
+        let currentDataPoint = 'level_a';
+        let currentDate = '';
+        let svg, tooltip;
+
+        // State abbreviations and positions for the hexagon grid
+        const stateHexGrid = {
+            "AK": { row: 0, col: 0 },
+            "ME": { row: 0, col: 10 },
+            "VT": { row: 1, col: 9 },
+            "NH": { row: 1, col: 10 },
+            "WA": { row: 1, col: 1 },
+            "MT": { row: 1, col: 2 },
+            "ND": { row: 1, col: 3 },
+            "MN": { row: 1, col: 4 },
+            "WI": { row: 1, col: 5 },
+            "MI": { row: 1, col: 6 },
+            "NY": { row: 1, col: 8 },
+            "MA": { row: 2, col: 9 },
+            "RI": { row: 2, col: 10 },
+            "ID": { row: 2, col: 1 },
+            "WY": { row: 2, col: 2 },
+            "SD": { row: 2, col: 3 },
+            "IA": { row: 2, col: 4 },
+            "IL": { row: 2, col: 5 },
+            "IN": { row: 2, col: 6 },
+            "OH": { row: 2, col: 7 },
+            "PA": { row: 2, col: 8 },
+            "NJ": { row: 3, col: 8 },
+            "CT": { row: 3, col: 9 },
+            "OR": { row: 3, col: 0 },
+            "NV": { row: 3, col: 1 },
+            "CO": { row: 3, col: 2 },
+            "NE": { row: 3, col: 3 },
+            "MO": { row: 3, col: 4 },
+            "KY": { row: 3, col: 5 },
+            "WV": { row: 3, col: 6 },
+            "VA": { row: 3, col: 7 },
+            "MD": { row: 4, col: 7 },
+            "DE": { row: 4, col: 8 },
+            "CA": { row: 4, col: 0 },
+            "UT": { row: 4, col: 1 },
+            "KS": { row: 4, col: 3 },
+            "AR": { row: 4, col: 4 },
+            "TN": { row: 4, col: 5 },
+            "NC": { row: 4, col: 6 },
+            "SC": { row: 5, col: 6 },
+            "DC": { row: 5, col: 7 },
+            "AZ": { row: 5, col: 1 },
+            "NM": { row: 5, col: 2 },
+            "OK": { row: 5, col: 3 },
+            "LA": { row: 5, col: 4 },
+            "MS": { row: 5, col: 5 },
+            "AL": { row: 6, col: 5 },
+            "GA": { row: 6, col: 6 },
+            "HI": { row: 6, col: 0 },
+            "TX": { row: 6, col: 3 },
+            "FL": { row: 7, col: 6 }
+        };
+
+        // Function to load and parse CSV data
+        async function loadData() {
+            try {
+                const response = await fetch('data/ice_denormalized_data.csv');
+                const csvText = await response.text();
+
+                // Parse CSV data
+                Papa.parse(csvText, {
+                    header: true,
+                    dynamicTyping: true, // Convert numeric values to numbers
+                    complete: function(results) {
+                        processData(results.data);
+                    },
+                    error: function(error) {
+                        console.error('Error parsing CSV:', error);
+                        document.getElementById('loading').textContent = 'Error loading data. Please try again.';
+                    }
+                });
+            } catch (error) {
+                console.error('Error fetching CSV:', error);
+                document.getElementById('loading').textContent = 'Error loading data. Please try again.';
+            }
+        }
+
+        // Process the data and organize by state and date
+        function processData(data) {
+            // Extract all unique dates
+            const dateSet = new Set();
+            
+            // Group data by state and date
+            data.forEach(row => {
+                const state = row.state;
+                const date = row.measured_on;
+                
+                // Skip rows with missing data
+                if (!state || !date) return;
+                
+                dateSet.add(date);
+                
+                // Initialize state data if it doesn't exist
+                if (!stateData[state]) {
+                    stateData[state] = {};
+                }
+                
+                // Initialize date data if it doesn't exist
+                if (!stateData[state][date]) {
+                    stateData[state][date] = {
+                        level_a: 0,
+                        level_b: 0,
+                        level_c: 0,
+                        level_d: 0,
+                        male_crim: 0,
+                        male_non_crim: 0,
+                        female_crim: 0,
+                        female_non_crim: 0,
+                        ice_threat_level_1: 0,
+                        ice_threat_level_2: 0,
+                        ice_threat_level_3: 0,
+                        no_ice_threat_level: 0,
+                        count: 0
+                    };
+                }
+                
+                // Add data values
+                stateData[state][date].level_a += row.level_a || 0;
+                stateData[state][date].level_b += row.level_b || 0;
+                stateData[state][date].level_c += row.level_c || 0;
+                stateData[state][date].level_d += row.level_d || 0;
+                stateData[state][date].male_crim += row.male_crim || 0;
+                stateData[state][date].male_non_crim += row.male_non_crim || 0;
+                stateData[state][date].female_crim += row.female_crim || 0;
+                stateData[state][date].female_non_crim += row.female_non_crim || 0;
+                stateData[state][date].ice_threat_level_1 += row.ice_threat_level_1 || 0;
+                stateData[state][date].ice_threat_level_2 += row.ice_threat_level_2 || 0;
+                stateData[state][date].ice_threat_level_3 += row.ice_threat_level_3 || 0;
+                stateData[state][date].no_ice_threat_level += row.no_ice_threat_level || 0;
+                stateData[state][date].count += 1;
+            });
+            
+            // Convert dates to array and sort
+            allDates = Array.from(dateSet).sort();
+            
+            // Populate date dropdown
+            populateDateDropdown();
+            
+            // Initialize the SVG
+            initializeSVG();
+            
+            // Set event listeners
+            document.getElementById('data-point-select').addEventListener('change', updateMap);
+            document.getElementById('date-select').addEventListener('change', updateMap);
+            
+            // Hide loading message
+            document.getElementById('loading').style.display = 'none';
+            
+            // Initialize map with first date and default data point
+            if (allDates.length > 0) {
+                currentDate = allDates[0];
+                document.getElementById('date-select').value = currentDate;
+                updateMap();
+            }
+        }
+
+        // Populate the date dropdown
+        function populateDateDropdown() {
+            const select = document.getElementById('date-select');
+            select.innerHTML = ''; // Clear loading option
+            
+            // Add dates to dropdown
+            allDates.forEach(date => {
+                const option = document.createElement('option');
+                option.value = date;
+                option.textContent = new Date(date).toLocaleDateString();
+                select.appendChild(option);
+            });
+        }
+
+        // Initialize the SVG for the hexagon grid
+        function initializeSVG() {
+            const mapContainer = document.getElementById('map');
+            const width = mapContainer.clientWidth || 1000;
+            const height = 600;
+            
+            // Create SVG element
+            svg = d3.select('#map')
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height);
+            
+            // Create tooltip
+            tooltip = d3.select('body')
+                .append('div')
+                .attr('class', 'tooltip')
+                .style('opacity', 0);
+        }
+
+        // Update the map based on selected data point and date
+        function updateMap() {
+            currentDataPoint = document.getElementById('data-point-select').value;
+            currentDate = document.getElementById('date-select').value;
+            
+            if (!currentDate) return;
+            
+            // Get label for the selected data point
+            const dataPointLabel = document.getElementById('data-point-select').options[
+                document.getElementById('data-point-select').selectedIndex
+            ].text;
+            
+            // Clear previous content
+            svg.selectAll('*').remove();
+            d3.select('.legend').remove();
+            
+            // Calculate hexagon size based on container dimensions
+            const width = svg.attr('width');
+            const height = svg.attr('height');
+            const hexRadius = Math.min(width / 22, height / 16);
+            const hexWidth = hexRadius * 2;
+            const hexHeight = Math.sqrt(3) * hexRadius;
+            
+            // Calculate values for each state
+            const stateValues = {};
+            let minValue = Infinity;
+            let maxValue = -Infinity;
+            
+            Object.keys(stateData).forEach(state => {
+                if (stateData[state][currentDate]) {
+                    const value = stateData[state][currentDate][currentDataPoint];
+                    stateValues[state] = value;
+                    minValue = Math.min(minValue, value);
+                    maxValue = Math.max(maxValue, value);
+                }
+            });
+            
+            // Create color scale
+            const colorScale = d3.scaleSequential(d3.interpolateViridis)
+                .domain([minValue, maxValue]);
+            
+            // Draw hexagons for each state
+            Object.keys(stateHexGrid).forEach(state => {
+                const { row, col } = stateHexGrid[state];
+                
+                // Calculate position (offset even rows for hexagon grid)
+                const xPos = col * (hexWidth * 0.75) + (row % 2 === 0 ? 0 : hexWidth * 0.375);
+                const yPos = row * hexHeight * 0.85;
+                
+                // Get value for this state
+                const value = stateValues[state] || 0;
+                
+                // Draw hexagon
+                const hexPoints = [];
+                for (let i = 0; i < 6; i++) {
+                    const angle = 2 * Math.PI / 6 * i;
+                    hexPoints.push([
+                        xPos + hexRadius * Math.cos(angle),
+                        yPos + hexRadius * Math.sin(angle)
+                    ]);
+                }
+                
+                // Create hexagon path
+                const hexPath = d3.line()(hexPoints);
+                
+                // Add hexagon to SVG
+                svg.append('path')
+                    .attr('d', hexPath)
+                    .attr('fill', stateValues[state] ? colorScale(value) : '#ccc')
+                    .attr('stroke', '#fff')
+                    .attr('stroke-width', 2)
+                    .on('mouseover', function(event) {
+                        tooltip.transition()
+                            .duration(200)
+                            .style('opacity', 0.9);
+                        tooltip.html(`
+                            <strong>${state}</strong><br>
+                            ${dataPointLabel}: ${value.toFixed(2)}
+                        `)
+                            .style('left', (event.pageX + 10) + 'px')
+                            .style('top', (event.pageY - 28) + 'px');
+                    })
+                    .on('mouseout', function() {
+                        tooltip.transition()
+                            .duration(500)
+                            .style('opacity', 0);
+                    });
+                
+                // Add state label
+                svg.append('text')
+                    .attr('x', xPos)
+                    .attr('y', yPos + 5)
+                    .attr('text-anchor', 'middle')
+                    .attr('font-size', '12px')
+                    .attr('fill', '#fff')
+                    .attr('pointer-events', 'none')
+                    .text(state);
+            });
+            
+            // Add title
+            svg.append('text')
+                .attr('x', width / 2)
+                .attr('y', 30)
+                .attr('text-anchor', 'middle')
+                .attr('font-size', '18px')
+                .attr('font-weight', 'bold')
+                .text(`${dataPointLabel} by State on ${new Date(currentDate).toLocaleDateString()}`);
+            
+            // Add legend
+            const legend = d3.select('.map-container')
+                .append('div')
+                .attr('class', 'legend');
+            
+            legend.append('div')
+                .style('font-weight', 'bold')
+                .style('margin-bottom', '8px')
+                .text(dataPointLabel);
+            
+            // Create legend items
+            const legendItems = 5;
+            for (let i = 0; i < legendItems; i++) {
+                const value = minValue + (maxValue - minValue) * (i / (legendItems - 1));
+                
+                const legendItem = legend.append('div')
+                    .attr('class', 'legend-item');
+                
+                legendItem.append('div')
+                    .attr('class', 'legend-color')
+                    .style('background-color', colorScale(value));
+                
+                legendItem.append('span')
+                    .text(value.toFixed(1));
+            }
+        }
+
+        // Load data when page loads
+        document.addEventListener('DOMContentLoaded', loadData);
+    </script>
+</body>
+</html>

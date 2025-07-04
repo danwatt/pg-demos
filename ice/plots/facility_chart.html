@@ -117,20 +117,25 @@
             // Group data by facility
             data.forEach(row => {
                 const facilityName = row.facility_name;
+                const state = row.state || '';
+                const facilityKey = facilityName;
 
                 // Skip rows with missing data
                 if (!facilityName) return;
 
                 // Initialize facility data if it doesn't exist
-                if (!facilitiesData[facilityName]) {
-                    facilitiesData[facilityName] = [];
+                if (!facilitiesData[facilityKey]) {
+                    facilitiesData[facilityKey] = {
+                        state: state,
+                        data: []
+                    };
                 }
 
                 // Convert date string to Date object
                 const date = new Date(row.measured_on);
 
                 // Add data point
-                facilitiesData[facilityName].push({
+                facilitiesData[facilityKey].data.push({
                     date: date,
                     // Detention levels
                     level_a: row.level_a || 0,
@@ -152,7 +157,7 @@
 
             // Sort data by date for each facility
             Object.keys(facilitiesData).forEach(facility => {
-                facilitiesData[facility].sort((a, b) => a.date - b.date);
+                facilitiesData[facility].data.sort((a, b) => a.date - b.date);
             });
 
             // Populate facility dropdown
@@ -177,7 +182,8 @@
             Object.keys(facilitiesData).sort().forEach(facility => {
                 const option = document.createElement('option');
                 option.value = facility;
-                option.textContent = facility;
+                const state = facilitiesData[facility].state;
+                option.textContent = state ? `${facility} (${state})` : facility;
                 select.appendChild(option);
             });
 
@@ -213,8 +219,8 @@
             // Aggregate data from all selected facilities
             const allDates = new Set();
             selectedFacilities.forEach(facility => {
-                if (facilitiesData[facility]) {
-                    facilitiesData[facility].forEach(d => {
+                if (facilitiesData[facility] && facilitiesData[facility].data) {
+                    facilitiesData[facility].data.forEach(d => {
                         allDates.add(d.date.toISOString().split('T')[0]);
                     });
                 }
@@ -247,8 +253,8 @@
 
             // Fill in the aggregated data
             selectedFacilities.forEach(facility => {
-                if (facilitiesData[facility]) {
-                    facilitiesData[facility].forEach(d => {
+                if (facilitiesData[facility] && facilitiesData[facility].data) {
+                    facilitiesData[facility].data.forEach(d => {
                         const dateStr = d.date.toISOString().split('T')[0];
                         if (aggregatedData[dateStr]) {
                             // Add values to aggregated data

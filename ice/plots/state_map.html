@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ICE State Data Visualization</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        select {
+            padding: 8px;
+            font-size: 16px;
+            min-width: 300px;
+        }
+        .map-container {
+            height: 600px;
+            width: 100%;
+        }
+        h1 {
+            color: #333;
+        }
+        .loading {
+            text-align: center;
+            font-size: 18px;
+            margin-top: 100px;
+        }
+        .info-box {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ICE Detention Data by State</h1>
+        <div class="controls">
+            <div style="display: flex; gap: 20px; align-items: center;">
+                <div>
+                    <label for="data-point-select">Select Data Point:</label>
+                    <select id="data-point-select">
+                        <option value="level_a">Low Risk (A)</option>
+                        <option value="level_b">Medium Low Risk (B)</option>
+                        <option value="level_c">Medium High Risk (C)</option>
+                        <option value="level_d">High Risk (D)</option>
+                        <option value="male_crim">Male Criminal</option>
+                        <option value="male_non_crim">Male Non-Criminal</option>
+                        <option value="female_crim">Female Criminal</option>
+                        <option value="female_non_crim">Female Non-Criminal</option>
+                        <option value="ice_threat_level_1">ICE Threat Level 1</option>
+                        <option value="ice_threat_level_2">ICE Threat Level 2</option>
+                        <option value="ice_threat_level_3">ICE Threat Level 3</option>
+                        <option value="no_ice_threat_level">No ICE Threat Level</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="date-select">Select Date:</label>
+                    <select id="date-select">
+                        <option value="">Loading dates...</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="map-container">
+            <div id="map"></div>
+            <div id="loading" class="loading">Loading data...</div>
+        </div>
+        <div class="info-box">
+            <p>This map shows ICE detention data aggregated by state. Select a data point and date to visualize the distribution across states.</p>
+            <p>The color intensity represents the magnitude of the selected data point in each state.</p>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let mapInstance = null;
+        let stateData = {};
+        let allDates = [];
+        let currentDataPoint = 'level_a';
+        let currentDate = '';
+
+        // Function to load and parse CSV data
+        async function loadData() {
+            try {
+                const response = await fetch('data/ice_denormalized_data.csv');
+                const csvText = await response.text();
+
+                // Parse CSV data
+                Papa.parse(csvText, {
+                    header: true,
+                    dynamicTyping: true, // Convert numeric values to numbers
+                    complete: function(results) {
+                        processData(results.data);
+                    },
+                    error: function(error) {
+                        console.error('Error parsing CSV:', error);
+                        document.getElementById('loading').textContent = 'Error loading data. Please try again.';
+                    }
+                });
+            } catch (error) {
+                console.error('Error fetching CSV:', error);
+                document.getElementById('loading').textContent = 'Error loading data. Please try again.';
+            }
+        }
+
+        // Process the data and organize by state and date
+        function processData(data) {
+            // Extract all unique dates
+            const dateSet = new Set();
+            
+            // Group data by state and date
+            data.forEach(row => {
+                const state = row.state;
+                const date = row.measured_on;
+                
+                // Skip rows with missing data
+                if (!state || !date) return;
+                
+                dateSet.add(date);
+                
+                // Initialize state data if it doesn't exist
+                if (!stateData[state]) {
+                    stateData[state] = {};
+                }
+                
+                // Initialize date data if it doesn't exist
+                if (!stateData[state][date]) {
+                    stateData[state][date] = {
+                        level_a: 0,
+                        level_b: 0,
+                        level_c: 0,
+                        level_d: 0,
+                        male_crim: 0,
+                        male_non_crim: 0,
+                        female_crim: 0,
+                        female_non_crim: 0,
+                        ice_threat_level_1: 0,
+                        ice_threat_level_2: 0,
+                        ice_threat_level_3: 0,
+                        no_ice_threat_level: 0,
+                        count: 0
+                    };
+                }
+                
+                // Add data values
+                stateData[state][date].level_a += row.level_a || 0;
+                stateData[state][date].level_b += row.level_b || 0;
+                stateData[state][date].level_c += row.level_c || 0;
+                stateData[state][date].level_d += row.level_d || 0;
+                stateData[state][date].male_crim += row.male_crim || 0;
+                stateData[state][date].male_non_crim += row.male_non_crim || 0;
+                stateData[state][date].female_crim += row.female_crim || 0;
+                stateData[state][date].female_non_crim += row.female_non_crim || 0;
+                stateData[state][date].ice_threat_level_1 += row.ice_threat_level_1 || 0;
+                stateData[state][date].ice_threat_level_2 += row.ice_threat_level_2 || 0;
+                stateData[state][date].ice_threat_level_3 += row.ice_threat_level_3 || 0;
+                stateData[state][date].no_ice_threat_level += row.no_ice_threat_level || 0;
+                stateData[state][date].count += 1;
+            });
+            
+            // Convert dates to array and sort
+            allDates = Array.from(dateSet).sort();
+            
+            // Populate date dropdown
+            populateDateDropdown();
+            
+            // Set event listeners
+            document.getElementById('data-point-select').addEventListener('change', updateMap);
+            document.getElementById('date-select').addEventListener('change', updateMap);
+            
+            // Hide loading message
+            document.getElementById('loading').style.display = 'none';
+            
+            // Initialize map with first date and default data point
+            if (allDates.length > 0) {
+                currentDate = allDates[0];
+                document.getElementById('date-select').value = currentDate;
+                updateMap();
+            }
+        }
+
+        // Populate the date dropdown
+        function populateDateDropdown() {
+            const select = document.getElementById('date-select');
+            select.innerHTML = ''; // Clear loading option
+            
+            // Add dates to dropdown
+            allDates.forEach(date => {
+                const option = document.createElement('option');
+                option.value = date;
+                option.textContent = new Date(date).toLocaleDateString();
+                select.appendChild(option);
+            });
+        }
+
+        // Update the map based on selected data point and date
+        function updateMap() {
+            currentDataPoint = document.getElementById('data-point-select').value;
+            currentDate = document.getElementById('date-select').value;
+            
+            if (!currentDate) return;
+            
+            // Prepare data for the map
+            const values = [];
+            const states = [];
+            const text = [];
+            
+            // Get label for the selected data point
+            const dataPointLabel = document.getElementById('data-point-select').options[
+                document.getElementById('data-point-select').selectedIndex
+            ].text;
+            
+            // Collect data for each state
+            Object.keys(stateData).forEach(state => {
+                if (stateData[state][currentDate]) {
+                    states.push(state);
+                    const value = stateData[state][currentDate][currentDataPoint];
+                    values.push(value);
+                    text.push(`${state}: ${value.toFixed(2)}`);
+                }
+            });
+            
+            // Create the map
+            const data = [{
+                type: 'choropleth',
+                locationmode: 'USA-states',
+                locations: states,
+                z: values,
+                text: text,
+                hoverinfo: 'text',
+                colorscale: 'Viridis',
+                colorbar: {
+                    title: dataPointLabel,
+                    thickness: 20
+                },
+                marker: {
+                    line: {
+                        color: 'white',
+                        width: 1
+                    }
+                }
+            }];
+            
+            const layout = {
+                title: `${dataPointLabel} by State on ${new Date(currentDate).toLocaleDateString()}`,
+                geo: {
+                    scope: 'usa',
+                    showlakes: true,
+                    lakecolor: 'rgb(255, 255, 255)'
+                },
+                margin: {
+                    l: 0,
+                    r: 0,
+                    b: 0,
+                    t: 50,
+                    pad: 4
+                }
+            };
+            
+            const config = {
+                responsive: true,
+                displayModeBar: true,
+                displaylogo: false
+            };
+            
+            // Render the map
+            Plotly.newPlot('map', data, layout, config);
+        }
+
+        // Load data when page loads
+        document.addEventListener('DOMContentLoaded', loadData);
+    </script>
+</body>
+</html>
