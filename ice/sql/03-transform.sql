@@ -47,7 +47,8 @@ FROM ice_raw_data r
            ('mandatory', r.mandatory)
     ) m(data_point, value);
 
-
+-- Temporary
+delete from ice_measurement where measured_on >= '2025-07-07';
 
 WITH DateOffsets AS (
     -- Calculate days into fiscal year for each measurement
